@@ -32,12 +32,12 @@ app.add_middleware(
 
 # Initialize models
 model = SolarGHIModel()
-model_path = os.path.join("src", "model", "data", "xgboost_model_ghi_predictor.pkl")
+model_path = os.path.join("model", "data", "xgboost_model_ghi_predictor.pkl")
 model.load_model(model_path)
 
 # Load realtime model
-realtime_model_path = os.path.join("src", "model", "realtime_model", "xgboost_model_realtime.pkl")
-realtime_scaler_path = os.path.join("src", "model", "realtime_model", "scaler_realtime.pkl")
+realtime_model_path = os.path.join("model", "realtime_model", "xgboost_model_realtime.pkl")
+realtime_scaler_path = os.path.join("model", "realtime_model", "scaler_realtime.pkl")
 
 # Initialize state lookup
 state_lookup = StateLookup()

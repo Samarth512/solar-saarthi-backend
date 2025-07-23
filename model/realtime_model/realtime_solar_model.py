@@ -4,8 +4,8 @@ import pandas as pd
 import joblib
 
 # Load pre-trained model and scaler
-xgb_model = joblib.load("src/model/realtime_model/xgboost_model_realtime.pkl")
-scaler = joblib.load("src/model/realtime_model/scaler_realtime.pkl")
+xgb_model = joblib.load("model/realtime_model/xgboost_model_realtime.pkl")
+scaler = joblib.load("model/realtime_model/scaler_realtime.pkl")
 
 def predict_realtime_ghi(lat, lon, start_date, temperature, wind_speed):
     """
