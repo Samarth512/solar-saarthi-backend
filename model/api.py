@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -15,6 +15,9 @@ import joblib
 import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import psycopg2
+import jwt  # PyJWT
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
@@ -166,6 +169,30 @@ class StateLookupRequest(BaseModel):
 class StateLookupResponse(BaseModel):
     state: str
     message: str
+
+class UserProfile(BaseModel):
+    firstName: str
+    lastName: str
+    mobileNumber: str
+    password: Optional[str] = ""  # Making password optional for social logins
+
+def get_current_user(authorization: Optional[str] = Header(None)):
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.split(" ")[1]
+    try:
+        payload = jwt.decode(
+            token,
+            os.getenv("SUPABASE_JWT_SECRET"),
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        return user_id
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
@@ -436,6 +463,64 @@ async def get_state(request: StateLookupRequest):
             status_code=500,
             detail=f"Error looking up state: {str(e)}"
         )
+
+@app.post("/api/save-user")
+def save_user(profile: UserProfile, user_id: str = Depends(get_current_user)):
+    try:
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = conn.cursor()
+        # Check if user already exists
+        cursor.execute("SELECT id FROM profiles WHERE id = %s", (user_id,))
+        user_exists = cursor.fetchone() is not None
+        if user_exists:
+            # Update existing user
+            cursor.execute("""
+                UPDATE profiles 
+                SET first_name = %s, last_name = %s, number = %s
+                WHERE id = %s    
+            """, (profile.firstName, profile.lastName, profile.mobileNumber, user_id))
+        else:
+            # Insert new user
+            cursor.execute("""
+                INSERT INTO profiles (id, first_name, last_name, number, password, is_social_login)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                user_id, 
+                profile.firstName, 
+                profile.lastName, 
+                profile.mobileNumber,
+                profile.password if profile.password else None,
+                profile.password == ""  # True if password is empty (social login)
+            ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"message": "User saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/api/user-profile")
+def get_user_profile(user_id: str = Depends(get_current_user)):
+    try:
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT first_name, last_name, number, is_social_login
+            FROM profiles WHERE id = %s
+        """, (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "firstName": user[0],
+            "lastName": user[1],
+            "mobileNumber": user[2],
+            "isSocialLogin": user[3] if len(user) > 3 else False
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
