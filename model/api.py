@@ -176,6 +176,16 @@ class UserProfile(BaseModel):
     mobileNumber: str
     password: Optional[str] = ""  # Making password optional for social logins
 
+class QuoteRequest(BaseModel):
+    roofArea: float
+    electricityBill: float
+    location: str
+
+class QuoteResponse(BaseModel):
+    estimated_capacity: float
+    estimated_cost: float
+    message: str
+
 def get_current_user(authorization: Optional[str] = Header(None)):
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
@@ -521,6 +531,20 @@ def get_user_profile(user_id: str = Depends(get_current_user)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.post("/api/calculate-quote", response_model=QuoteResponse)
+def calculate_quote(request: QuoteRequest, user_id: str = Depends(get_current_user)):
+    # Simple logic: estimate capacity as roofArea/10, cost as capacity*Rs.50000
+    try:
+        estimated_capacity = request.roofArea / 10  # kW
+        estimated_cost = estimated_capacity * 50000  # INR
+        return QuoteResponse(
+            estimated_capacity=estimated_capacity,
+            estimated_cost=estimated_cost,
+            message="Quote calculated successfully."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating quote: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
